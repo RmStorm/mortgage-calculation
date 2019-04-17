@@ -1,1 +1,2 @@
 pyside2==5.12.2
+matplotlib==3.0.3

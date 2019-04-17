@@ -1,6 +1,5 @@
 import datetime
 
-
 example_input = {'date of creation': datetime.datetime(2019, 3, 20),
                  'rent per month': 1000,
                  'housing money': 2000,
