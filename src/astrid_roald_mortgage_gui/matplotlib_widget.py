@@ -4,11 +4,12 @@ from matplotlib.figure import Figure
 
 
 class MyMplCanvas(FigureCanvas):
-    """Ultimately, this is a QWidget (as well as a FigureCanvasAgg, etc.)."""
+    """This is a QWidget (as well as a FigureCanvasAgg, etc.)."""
 
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
+        self.fig.tight_layout()
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
