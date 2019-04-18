@@ -24,7 +24,7 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.cost_canvas = MyMplCanvas(width=5, height=4, dpi=100)
         self.debt_canvas = MyMplCanvas(width=5, height=4, dpi=100)
         self.cur_lines = [None, None]
-        self.use_bsu_check_box = QtWidgets.QCheckBox('Use BSU as security')
+        self.use_bsu_as_security = QtWidgets.QCheckBox('Use BSU as security')
         self.use_toploan = QtWidgets.QCheckBox('Take out toploan')
 
         # Create layout and add widgets
@@ -41,7 +41,6 @@ class MortgagePlotter(QtWidgets.QDialog):
         top_layout.addLayout(top_left_layout)
 
         input_data_layout = QtWidgets.QFormLayout()
-        top_left_layout.addLayout(input_data_layout)
 
         options_layout = QtWidgets.QGridLayout()
         top_layout.addLayout(options_layout)
@@ -66,15 +65,16 @@ class MortgagePlotter(QtWidgets.QDialog):
                 v.textChanged.connect(self.change_current_cost_line)
             else:
                 raise KeyError(f'Unaccounted for key in input_dict: {k}')
+        top_left_layout.addLayout(input_data_layout)
 
-        for i, widget in enumerate([self.ending_date, self.use_bsu_check_box,
+        for i, widget in enumerate([self.ending_date, self.use_bsu_as_security,
                                     self.use_toploan, self.button]):
             options_layout.addWidget(widget, i, 0)
 
         # Connect callbacks
         self.button.clicked.connect(self.add_cost_line)
         for callback in [self.mortgage_date.dateChanged, self.ending_date.dateChanged,
-                         self.use_bsu_check_box.stateChanged, self.use_toploan.stateChanged]:
+                         self.use_bsu_as_security.stateChanged, self.use_toploan.stateChanged]:
             callback.connect(self.change_current_cost_line)
         self.add_cost_line()
 
@@ -91,10 +91,6 @@ class MortgagePlotter(QtWidgets.QDialog):
                     self.value_widgets['top loan interest percentage'].text())),
                 'mortgage monthly interest': get_monthly_interest_from_yearly(float(
                     self.value_widgets['mortgage interest percentage'].text()))}
-        # 'top loan monthly interest': (1 + (float(self.value_widgets['top loan interest percentage'].text())
-        #                                    / 100)) ** (1 / 12) - 1,
-        # 'mortgage monthly interest': (1 + (float(self.value_widgets['mortgage interest percentage'].text())
-        #                                    / 100)) ** (1 / 12) - 1}
 
     def set_legend_labels(self):
         label = f"d: {self.mortgage_date.date().toString('yyyy/MM/dd')}, " \
@@ -102,7 +98,7 @@ class MortgagePlotter(QtWidgets.QDialog):
             f"g: {self.value_widgets['mortgage goal'].text()}, " \
             f"t%: {self.value_widgets['top loan interest percentage'].text()}, " \
             f"m%: {self.value_widgets['mortgage interest percentage'].text()}, " \
-            f"{'BSU security' if bool(self.use_bsu_check_box.checkState()) else 'BSU popped'}, " \
+            f"{'BSU security' if bool(self.use_bsu_as_security.checkState()) else 'BSU popped'}, " \
             f"{'Toploan' if bool(self.use_toploan.checkState()) else ''}"
         self.cur_lines[0].set_label(label)
         self.cur_lines[1].set_label(label)
@@ -134,8 +130,9 @@ class MortgagePlotter(QtWidgets.QDialog):
 
     def get_cost(self):
         number_of_months = round((self.ending_date.date().toPython() - self.starting_date.date()).days / 365 * 12)
-        if bool(self.use_bsu_check_box.checkState()):
+        if bool(self.use_bsu_as_security.checkState()):
             if bool(self.use_toploan.checkState()):
+                # return new_calc_attempt(number_of_months, self.get_current_values())
                 raise RuntimeError('Method not yet implemented')
             else:
                 return calculate_cost_while_saving_with_bsu_as_security(number_of_months, self.get_current_values())
