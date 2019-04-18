@@ -25,11 +25,15 @@ def calculate_cost_with_top_loan(duration, housing_money, mortgage, top_loan,
         pay_down = housing_money - month_cost
         if top_loan > pay_down:
             top_loan = top_loan - pay_down
-        elif top_loan == 0:
-            mortgage = mortgage - pay_down
-        else:
-            mortgage = mortgage - pay_down + top_loan
+        elif top_loan <= pay_down and top_loan != 0:
+            mortgage = mortgage + top_loan - pay_down
             top_loan = 0
+        elif mortgage > pay_down:
+            mortgage = mortgage - pay_down
+        elif mortgage <= pay_down and mortgage != 0:
+            mortgage = 0
+        # else:
+        #     break
     return cumulative_cost
 
 
