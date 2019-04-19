@@ -2,7 +2,7 @@ import copy
 import datetime
 
 
-class Person():
+class Person:
     def __init__(self, birth_date, name, housing_money, bsu, bsu2, bsu_left_to_fill, bsu2_left_to_fill):
         self.birth_date = birth_date
         self.name = name
@@ -10,10 +10,11 @@ class Person():
         self.bsu = bsu
         self.bsu2 = bsu2
         self.bsu_left_to_fill = bsu_left_to_fill
+        self.bsu_left_to_fill_year = 25000
         self.bsu2_left_to_fill = bsu2_left_to_fill
 
 
-class AnalysisStartValues():
+class AnalysisStartValues:
     def __init__(self, persons, simulation_start_date, rent,
                  mortgage_goal, top_loan_interest_percentage, mortgage_interest_percentage):
         self.persons = persons
@@ -35,7 +36,7 @@ def get_monthly_interest_from_yearly(yearly_interest_percentage: float) -> float
     return (1+(yearly_interest_percentage/100))**(1/12)-1
 
 
-class SavingsSimulation():
+class SavingsSimulation:
     def __init__(self, analysis_variables, analysis_start_values: AnalysisStartValues):
         self.mortgage_goal = analysis_variables.mortgage_goal
         self.mortgage = 0
@@ -128,13 +129,27 @@ class SavingsSimulation():
             self.mortgage = 0
         else:
             self.regular_savings += combined_money
+        print(self.regular_savings)
 
     def new_bsu_year(self):
-        bsu_tax_rebate = sum(25000 - person.bsu_left_to_fill for person in self.persons.values() if person.bsu > 0)
+        bsu_tax_rebate = {name: (person.bsu_left_to_fill_year - person.bsu_left_to_fill) * .2
+                          for name, person in self.persons.items() if person.bsu > 0}
         for name in list(self.persons.keys()):
-            self.persons[name].bsu_left_to_fill = 25000
-            self.persons[name].bsu2_left_to_fill = 25000
-        return bsu_tax_rebate * .2
+            self.persons[name].bsu = self.persons[name].bsu * ((1 + self.bsu_interest) ** 12)
+            self.persons[name].bsu2 = self.persons[name].bsu2 * ((1 + self.bsu_interest) ** 12)
+            self.persons[name].bsu_left_to_fill = min(25000, max(300000 - self.persons[name].bsu, 0))
+            self.persons[name].bsu2_left_to_fill = min(25000, max(300000 - self.persons[name].bsu2, 0))
+            self.persons[name].bsu_left_to_fill_year = self.persons[name].bsu_left_to_fill
+        return bsu_tax_rebate
+
+    def empty_bsu(self, name):
+        extra_money = self.persons[name].bsu + self.persons[name].bsu2
+        self.persons[name].bsu = 0
+        self.persons[name].bsu2 = 0
+        self.persons[name].bsu_left_to_fill = 0
+        self.persons[name].bsu2_left_to_fill = 0
+        self.persons[name].bsu_left_to_fill_year = 0
+        return extra_money
 
 
 def date_range(start_date, months):
@@ -152,17 +167,24 @@ def calculate_cost(number_of_months, analysis_variables, analysis_start_values: 
     started_mortgage = False
 
     for pay_date in date_range(analysis_start_values.simulation_start_date, number_of_months):
-        if pay_date.month == 1:
-            bsu_tax_rebate = saving_simulation.new_bsu_year()
-            cumulative_cost[-1] = cumulative_cost[-1]-bsu_interest_this_year - bsu_tax_rebate
-            bsu_interest_this_year = 0
-        else:
-            bsu_interest_this_year = saving_simulation.get_bsu_interest_for_one_month(bsu_interest_this_year)
-        this_months_money = {name: person.housing_money for name, person in saving_simulation.persons.items()}
         time.append(pay_date)
-
+        this_months_money = {name: person.housing_money for name, person in saving_simulation.persons.items()}
         this_months_cost, this_months_money = saving_simulation.get_month_cost(started_mortgage, this_months_money)
         cumulative_cost.append(this_months_cost + cumulative_cost[-1])
+
+        if pay_date.month == 1:
+            bsu_tax_rebate = saving_simulation.new_bsu_year()
+            cumulative_cost[-1] = cumulative_cost[-1] - bsu_interest_this_year - sum(bsu_tax_rebate.values())
+            bsu_interest_this_year = 0
+            for name, tax_rebate in bsu_tax_rebate.items():
+                this_months_money[name] += tax_rebate
+        else:
+            bsu_interest_this_year = saving_simulation.get_bsu_interest_for_one_month(bsu_interest_this_year)
+
+        for name, person in saving_simulation.persons.items():
+            if pay_date - person.birth_date > datetime.timedelta(days=34*365):
+                extra_money = saving_simulation.empty_bsu(name)
+                this_months_money[name] += extra_money
 
         # If saving, save up the money in the regular savings, otherwise pay down mortgage
         if pay_date < analysis_variables.mortgage_date_widget.date().toPython():
