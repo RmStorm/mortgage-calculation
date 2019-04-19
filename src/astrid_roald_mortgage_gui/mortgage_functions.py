@@ -1,35 +1,7 @@
 import copy
 import datetime
 
-
-class Person:
-    def __init__(self, birth_date, name, housing_money, bsu, bsu2, bsu_left_to_fill, bsu2_left_to_fill):
-        self.birth_date = birth_date
-        self.name = name
-        self.housing_money = housing_money
-        self.bsu = bsu
-        self.bsu2 = bsu2
-        self.bsu_left_to_fill = bsu_left_to_fill
-        self.bsu_left_to_fill_year = 25000
-        self.bsu2_left_to_fill = bsu2_left_to_fill
-
-
-class AnalysisStartValues:
-    def __init__(self, persons, simulation_start_date, rent,
-                 mortgage_goal, top_loan_interest_percentage, mortgage_interest_percentage):
-        self.persons = persons
-        self.simulation_start_date = simulation_start_date
-        self.rent = rent
-        self.deposit = 3*rent
-        self.bsu_interest_percentage = 3.6
-        self.mortgage_goal = mortgage_goal
-        self.top_loan_interest_percentage = top_loan_interest_percentage
-        self.mortgage_interest_percentage = mortgage_interest_percentage
-
-
-example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 1000, 1000, 500, 1000, 1500),
-                                     Person(datetime.date(1990, 1, 1), 'p2', 1200, 1000, 1000, 0, 0)],
-                                    datetime.date(2019, 3, 20), 1000, 200000, 10, 1)
+from astrid_roald_mortgage_gui.mortgage_objects import AnalysisStartValues
 
 
 def get_monthly_interest_from_yearly(yearly_interest_percentage: float) -> float:
@@ -47,7 +19,7 @@ class SavingsSimulation:
 
         self.persons = {person.name: copy.deepcopy(person) for person in analysis_start_values.persons}
         for name, person in self.persons.items():
-            person.housing_money = float(analysis_variables.housing_money_widgets[name].text())
+            person.housing_money = analysis_variables.housing_money[name]
         self.total_housing_money = analysis_variables.total_housing_money
 
         self.bsu_interest = get_monthly_interest_from_yearly(analysis_start_values.bsu_interest_percentage)
@@ -129,17 +101,16 @@ class SavingsSimulation:
             self.mortgage = 0
         else:
             self.regular_savings += combined_money
-        print(self.regular_savings)
 
     def new_bsu_year(self):
-        bsu_tax_rebate = {name: (person.bsu_left_to_fill_year - person.bsu_left_to_fill) * .2
+        bsu_tax_rebate = {name: (person.maximum_bsu_left_to_fill - person.bsu_left_to_fill) * .2
                           for name, person in self.persons.items() if person.bsu > 0}
         for name in list(self.persons.keys()):
             self.persons[name].bsu = self.persons[name].bsu * ((1 + self.bsu_interest) ** 12)
             self.persons[name].bsu2 = self.persons[name].bsu2 * ((1 + self.bsu_interest) ** 12)
             self.persons[name].bsu_left_to_fill = min(25000, max(300000 - self.persons[name].bsu, 0))
             self.persons[name].bsu2_left_to_fill = min(25000, max(300000 - self.persons[name].bsu2, 0))
-            self.persons[name].bsu_left_to_fill_year = self.persons[name].bsu_left_to_fill
+            self.persons[name].maximum_bsu_left_to_fill = self.persons[name].bsu_left_to_fill
         return bsu_tax_rebate
 
     def empty_bsu(self, name):
@@ -148,7 +119,7 @@ class SavingsSimulation:
         self.persons[name].bsu2 = 0
         self.persons[name].bsu_left_to_fill = 0
         self.persons[name].bsu2_left_to_fill = 0
-        self.persons[name].bsu_left_to_fill_year = 0
+        self.persons[name].maximum_bsu_left_to_fill = 0
         return extra_money
 
 
@@ -187,7 +158,7 @@ def calculate_cost(number_of_months, analysis_variables, analysis_start_values: 
                 this_months_money[name] += extra_money
 
         # If saving, save up the money in the regular savings, otherwise pay down mortgage
-        if pay_date < analysis_variables.mortgage_date_widget.date().toPython():
+        if pay_date < analysis_variables.mortgage_date:
             this_months_money = saving_simulation.top_up_bsus(this_months_money)
             saving_simulation.regular_savings += sum(this_months_money.values())
             total_debt.append(0)

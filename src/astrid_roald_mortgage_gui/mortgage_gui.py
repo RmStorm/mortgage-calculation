@@ -4,19 +4,19 @@ import datetime
 from PySide2 import QtWidgets
 # from PySide2 import QtCore, QtGui
 
+from astrid_roald_mortgage_gui.mortgage_objects import AnalysisVariables
 from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost, AnalysisStartValues
 from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
 from astrid_roald_mortgage_gui.matplotlib_widget import MyMplCanvas
 
 
-class AnalysisVariables():
-    def __init__(self, analysis_start_values: AnalysisStartValues, callback, input_data_layout,
-                 use_bsu_as_security_widget, mortgage_date_widget):
+class AnalysisVariableWidgets:
+    def __init__(self, analysis_start_values: AnalysisStartValues, callback, input_data_layout):
         self.housing_money_widgets = {}
 
-        self.use_bsu_as_security_widget = use_bsu_as_security_widget
+        self.use_bsu_as_security_widget = QtWidgets.QCheckBox('Use BSU as security')
         self.use_bsu_as_security_widget.stateChanged.connect(callback)
-        self.mortgage_date_widget = mortgage_date_widget
+        self.mortgage_date_widget = QtWidgets.QDateEdit()
         self.mortgage_date_widget.setDate(analysis_start_values.simulation_start_date + datetime.timedelta(days=73))
         self.mortgage_date_widget.dateChanged.connect(callback)
         input_data_layout.addRow('mortgage date', self.mortgage_date_widget)
@@ -33,30 +33,6 @@ class AnalysisVariables():
             widget.textChanged.connect(callback)
             input_data_layout.addRow(field.replace('_', ' '), getattr(self, f'{field}_widget'))
 
-    @property
-    def total_housing_money(self):
-        return sum(float(widget.text()) for widget in self.housing_money_widgets.values())
-
-    @property
-    def use_bsu_as_security(self):
-        return bool(self.use_bsu_as_security_widget.checkState())
-
-    @property
-    def mortgage_date(self):
-        return self.mortgage_date_widget.date().toPython()
-
-    @property
-    def mortgage_goal(self):
-        return float(self.mortgage_goal_widget.text())
-
-    @property
-    def top_loan_interest_percentage(self):
-        return float(self.top_loan_interest_percentage_widget.text())
-
-    @property
-    def mortgage_interest_percentage(self):
-        return float(self.mortgage_interest_percentage_widget.text())
-
 
 class MortgagePlotter(QtWidgets.QDialog):
     def __init__(self, analysis_start_values: AnalysisStartValues, parent=None):
@@ -65,7 +41,7 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.analysis_start_values = analysis_start_values
         self.starting_date = self.analysis_start_values.simulation_start_date
         self.ending_date = QtWidgets.QDateEdit()
-        self.ending_date.setDate(self.starting_date + datetime.timedelta(days=360*7.5))
+        self.ending_date.setDate(self.starting_date + datetime.timedelta(days=360*9.5))
         self.ending_date.dateChanged.connect(self.change_current_cost_line)
 
         # Create layout
@@ -87,8 +63,8 @@ class MortgagePlotter(QtWidgets.QDialog):
         top_layout.addLayout(options_layout)
 
         # Create widgets and add then to layout
-        self.analysis_variables = AnalysisVariables(analysis_start_values, self.change_current_cost_line, input_data_layout,
-                                                    QtWidgets.QCheckBox('Use BSU as security'), QtWidgets.QDateEdit())
+        self.analysis_variable_widgets = AnalysisVariableWidgets(analysis_start_values,
+                                                                 self.change_current_cost_line, input_data_layout)
         self.button = QtWidgets.QPushButton("Save current cost calculation")
         self.button.clicked.connect(self.add_cost_line)
 
@@ -106,7 +82,7 @@ class MortgagePlotter(QtWidgets.QDialog):
         [static_info_layout.addWidget(QtWidgets.QLabel(info_label)) for info_label in info_labels]
         static_info_layout.addLayout(input_data_layout)
 
-        for i, widget in enumerate([self.ending_date, self.analysis_variables.use_bsu_as_security_widget, self.button]):
+        for i, widget in enumerate([self.ending_date, self.analysis_variable_widgets.use_bsu_as_security_widget, self.button]):
             options_layout.addWidget(widget, i, 0)
 
         # Do first simulation
@@ -114,12 +90,13 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.add_cost_line()
 
     def set_legend_labels(self, top_loan):
-        label = f"d: {self.analysis_variables.mortgage_date.strftime('%d/%m/%Y')}, " \
-            f"h: {self.analysis_variables.total_housing_money}, " \
-            f"g: {self.analysis_variables.mortgage_goal}, " \
-            f"t%: {self.analysis_variables.top_loan_interest_percentage}, " \
-            f"m%: {self.analysis_variables.mortgage_interest_percentage}, " \
-            f"{'BSU security' if self.analysis_variables.use_bsu_as_security else 'BSU popped'}, " \
+        analysis_variables = AnalysisVariables(self.analysis_variable_widgets)
+        label = f"d: {analysis_variables.mortgage_date.strftime('%d/%m/%Y')}, " \
+            f"h: {analysis_variables.total_housing_money}, " \
+            f"g: {analysis_variables.mortgage_goal}, " \
+            f"t%: {analysis_variables.top_loan_interest_percentage}, " \
+            f"m%: {analysis_variables.mortgage_interest_percentage}, " \
+            f"{'BSU security' if analysis_variables.use_bsu_as_security else 'BSU popped'}, " \
             f"Toploan: {top_loan}"
         self.cur_lines[0].set_label(label)
         self.cur_lines[1].set_label(label)
@@ -151,9 +128,8 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.redraw_canvasses()
 
     def get_cost(self):
-        # return [0,1], [1,2], [3,1], 100
         number_of_months = round((self.ending_date.date().toPython() - self.starting_date).days / 365 * 12)
-        return calculate_cost(number_of_months, self.analysis_variables, self.analysis_start_values)
+        return calculate_cost(number_of_months, AnalysisVariables(self.analysis_variable_widgets), self.analysis_start_values)
 
 
 def run_app():
