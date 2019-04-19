@@ -17,6 +17,7 @@ def get_monthly_interest_from_yearly(yearly_interest_percentage: float) -> float
 
 class SavingsSimulation():
     def __init__(self, sim_values):
+        self.mortgage_goal =sim_values['mortgage goal']
         self.mortgage = 0
         self.top_loan = 0
 
@@ -34,20 +35,36 @@ class SavingsSimulation():
         self.mortgage_interest = sim_values['mortgage monthly interest']
         self.top_loan_interest = sim_values['top loan monthly interest']
 
+    def start_mortgage(self, use_bsu_as_security):
+        if use_bsu_as_security:
+            security = self.mortgage_goal + self.bsu + self.bsu2
+            self.mortgage = min(security * .85, self.mortgage_goal - self.regular_savings)
+            self.top_loan = max(self.mortgage_goal - self.regular_savings - security * .85, 0)
+            self.regular_savings = 0
+        else:
+            security = self.mortgage_goal
+            savings = self.empty_savings()
+            self.mortgage = min(security * .85, self.mortgage_goal - savings)
+            self.top_loan = max(self.mortgage_goal - savings - security * .85, 0)
+
     def get_total_savings(self):
         return self.bsu + self.bsu2 + self.regular_savings
 
-    def get_month_cost(self):
-        if self.mortgage == 0:
-            return self.rent
-        else:
+    def get_month_cost(self, got_mortgage):
+        if got_mortgage:
             return self.mortgage * self.mortgage_interest + self.top_loan * self.top_loan_interest
+        else:
+            return self.rent
 
-    def pay_down_mortgage(self, month_leftover_money):
-        if self.mortgage > month_leftover_money:
+    def pay_down_debt(self, month_leftover_money):
+        if self.top_loan > month_leftover_money:
+            self.top_loan -= month_leftover_money
+        elif self.top_loan <= month_leftover_money and self.top_loan != 0:
+            self.mortgage += self.top_loan - month_leftover_money
+            self.top_loan = 0
+        elif self.mortgage > month_leftover_money:
             self.mortgage -= month_leftover_money
         elif self.mortgage <= month_leftover_money and self.mortgage != 0:
-            self.regular_savings += month_leftover_money - self.mortgage
             self.mortgage = 0
         else:
             self.regular_savings += month_leftover_money
@@ -95,31 +112,35 @@ def date_range(start_date, months):
     if start_date.day > 28:
         raise ValueError('This date cannot be consistently increased with one month since the day is more than 28')
     for n in range(1, months):
-        yield datetime.datetime(start_date.year + int((start_date.month + n - 1) / 12),
+        yield datetime.date(start_date.year + int((start_date.month + n - 1) / 12),
                                 (start_date.month + n - 1) % 12 + 1, start_date.day)
 
 
-def calculate_cost_while_saving(number_of_months, current_values):
+def calculate_cost(number_of_months, current_values, use_bsu_as_security):
     saving_simulation = SavingsSimulation(current_values)
     cumulative_cost, total_debt, time = [0], [0], [current_values['starting date']]
     bsu_interest_this_year = saving_simulation.get_bsu_interest_for_several_months(time[0].month)
+    got_mortgage = False
 
     for pay_date in date_range(current_values['starting date'], number_of_months):
         time.append(pay_date)
-        this_months_cost = saving_simulation.get_month_cost()
+        this_months_cost = saving_simulation.get_month_cost(got_mortgage)
         cumulative_cost.append(this_months_cost + cumulative_cost[-1])
         month_leftover_money = current_values['housing money']-this_months_cost
 
         # If saving, save up the money in the regular savings, otherwise pay down mortgage
-        if saving_simulation.mortgage == 0:
+        if pay_date < current_values['mortgage date']:
             month_leftover_money = saving_simulation.top_up_bsus(month_leftover_money)
             saving_simulation.regular_savings += month_leftover_money
             total_debt.append(0)
-            if saving_simulation.get_total_savings() >= current_values['mortgage goal'] * .15:
-                saving_simulation.mortgage = current_values['mortgage goal'] - saving_simulation.empty_savings()
-                total_debt[-1] = saving_simulation.mortgage
         else:
-            saving_simulation.pay_down_mortgage(month_leftover_money)
+            if not got_mortgage:
+                saving_simulation.start_mortgage(use_bsu_as_security)
+                got_mortgage = True
+                top_loan = saving_simulation.top_loan
+            if use_bsu_as_security:
+                month_leftover_money = saving_simulation.top_up_bsus(month_leftover_money)
+            saving_simulation.pay_down_debt(month_leftover_money)
             total_debt.append(saving_simulation.mortgage + saving_simulation.top_loan)
 
         bsu_interest_this_year += saving_simulation.get_bsu_interest_for_one_month()
@@ -128,68 +149,7 @@ def calculate_cost_while_saving(number_of_months, current_values):
             cumulative_cost[-1] = cumulative_cost[-1]-bsu_interest_this_year - bsu_tax_rebate
             bsu_interest_this_year = 0
             saving_simulation.new_bsu_year()
-    return time, cumulative_cost, total_debt
-
-
-def calculate_cost_while_saving_with_bsu_as_security(number_of_months, current_values):
-    saving_simulation = SavingsSimulation(current_values)
-    cumulative_cost, total_debt, time = [0], [0], [current_values['starting date']]
-    bsu_interest_this_year = saving_simulation.get_bsu_interest_for_several_months(time[0].month)
-
-    for pay_date in date_range(current_values['starting date'], number_of_months):
-        time.append(pay_date)
-        this_months_cost = saving_simulation.get_month_cost()
-        cumulative_cost.append(this_months_cost + cumulative_cost[-1])
-        month_leftover_money = current_values['housing money']-this_months_cost
-
-        # If saving, save up the money in the regular savings, otherwise pay down mortgage
-        if saving_simulation.mortgage == 0:
-            month_leftover_money = saving_simulation.top_up_bsus(month_leftover_money)
-            saving_simulation.regular_savings += month_leftover_money
-            total_debt.append(0)
-            if (current_values['mortgage goal'] + saving_simulation.bsu + saving_simulation.bsu2) * .85 >= \
-                    current_values['mortgage goal'] - saving_simulation.regular_savings:
-                saving_simulation.mortgage = current_values['mortgage goal']-saving_simulation.regular_savings
-                saving_simulation.regular_savings = 0
-                total_debt[-1] = saving_simulation.mortgage
-        else:
-            month_leftover_money = saving_simulation.top_up_bsus(month_leftover_money)
-            saving_simulation.pay_down_mortgage(month_leftover_money)
-            total_debt.append(saving_simulation.mortgage + saving_simulation.top_loan)
-
-        bsu_interest_this_year += saving_simulation.get_bsu_interest_for_one_month()
-        if pay_date.month == 1:
-            bsu_tax_rebate = (50000-saving_simulation.bsu_left_to_fill)*.2 if saving_simulation.bsu != 0 else 0
-            cumulative_cost[-1] = cumulative_cost[-1]-bsu_interest_this_year - bsu_tax_rebate
-            bsu_interest_this_year = 0
-            saving_simulation.new_bsu_year()
-    return time, cumulative_cost, total_debt
-
-
-def calculate_cost_with_top_loan(number_of_months, current_values):
-    mortgage = current_values['mortgage goal']*.85
-    top_loan = current_values['mortgage goal']*.15 - current_values['deposit'] - \
-               current_values['bsu savings'] - current_values['bsu2 savings']
-    cumulative_cost = [0]
-    total_debt = [mortgage + top_loan]
-    time = [current_values['starting date']]
-    for pay_date in date_range(current_values['starting date'], number_of_months):
-        month_cost = mortgage*current_values['mortgage monthly interest'] + \
-                     top_loan*current_values['top loan monthly interest']
-        cumulative_cost.append(month_cost + cumulative_cost[-1])
-        pay_down = current_values['housing money'] - month_cost
-        if top_loan > pay_down:
-            top_loan = top_loan - pay_down
-        elif top_loan <= pay_down and top_loan != 0:
-            mortgage = mortgage + top_loan - pay_down
-            top_loan = 0
-        elif mortgage > pay_down:
-            mortgage = mortgage - pay_down
-        elif mortgage <= pay_down and mortgage != 0:
-            mortgage = 0
-        time.append(pay_date)
-        total_debt.append(mortgage + top_loan)
-    return time, cumulative_cost, total_debt
+    return time, cumulative_cost, total_debt, top_loan
 
 
 def main():

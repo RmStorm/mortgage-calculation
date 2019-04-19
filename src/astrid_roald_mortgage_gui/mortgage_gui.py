@@ -4,8 +4,7 @@ import datetime
 from PySide2 import QtWidgets
 # from PySide2 import QtCore, QtGui
 
-from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost_with_top_loan, calculate_cost_while_saving,\
-    get_monthly_interest_from_yearly, calculate_cost_while_saving_with_bsu_as_security
+from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost, get_monthly_interest_from_yearly
 from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
 from astrid_roald_mortgage_gui.matplotlib_widget import MyMplCanvas
 
@@ -25,7 +24,6 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.debt_canvas = MyMplCanvas(width=5, height=4, dpi=100)
         self.cur_lines = [None, None]
         self.use_bsu_as_security = QtWidgets.QCheckBox('Use BSU as security')
-        self.use_toploan = QtWidgets.QCheckBox('Take out toploan')
 
         # Create layout and add widgets
         layout = QtWidgets.QVBoxLayout()
@@ -67,14 +65,13 @@ class MortgagePlotter(QtWidgets.QDialog):
                 raise KeyError(f'Unaccounted for key in input_dict: {k}')
         top_left_layout.addLayout(input_data_layout)
 
-        for i, widget in enumerate([self.ending_date, self.use_bsu_as_security,
-                                    self.use_toploan, self.button]):
+        for i, widget in enumerate([self.ending_date, self.use_bsu_as_security, self.button]):
             options_layout.addWidget(widget, i, 0)
 
         # Connect callbacks
         self.button.clicked.connect(self.add_cost_line)
         for callback in [self.mortgage_date.dateChanged, self.ending_date.dateChanged,
-                         self.use_bsu_as_security.stateChanged, self.use_toploan.stateChanged]:
+                         self.use_bsu_as_security.stateChanged]:
             callback.connect(self.change_current_cost_line)
         self.add_cost_line()
 
@@ -92,55 +89,46 @@ class MortgagePlotter(QtWidgets.QDialog):
                 'mortgage monthly interest': get_monthly_interest_from_yearly(float(
                     self.value_widgets['mortgage interest percentage'].text()))}
 
-    def set_legend_labels(self):
+    def set_legend_labels(self, top_loan):
         label = f"d: {self.mortgage_date.date().toString('yyyy/MM/dd')}, " \
             f"h: {self.value_widgets['housing money'].text()}, " \
             f"g: {self.value_widgets['mortgage goal'].text()}, " \
             f"t%: {self.value_widgets['top loan interest percentage'].text()}, " \
             f"m%: {self.value_widgets['mortgage interest percentage'].text()}, " \
             f"{'BSU security' if bool(self.use_bsu_as_security.checkState()) else 'BSU popped'}, " \
-            f"{'Toploan' if bool(self.use_toploan.checkState()) else ''}"
+            f"Toploan: {top_loan}"
         self.cur_lines[0].set_label(label)
         self.cur_lines[1].set_label(label)
         self.cost_canvas.axes.legend()
         self.debt_canvas.axes.legend()
 
     def redraw_canvasses(self):
-        self.set_legend_labels()
         for canvas in [self.cost_canvas, self.debt_canvas]:
             canvas.axes.relim()
             canvas.axes.autoscale_view()
             canvas.draw()
 
     def add_cost_line(self):
-        time, cost_list, total_debt = self.get_cost()
+        time, cost_list, total_debt, top_loan = self.get_cost()
         self.cost_canvas.axes.plot(time, cost_list)
         self.cur_lines[0] = self.cost_canvas.axes.lines[-1]
         self.debt_canvas.axes.plot(time, total_debt)
         self.cur_lines[1] = self.debt_canvas.axes.lines[-1]
+        self.set_legend_labels(top_loan)
         self.redraw_canvasses()
 
     def change_current_cost_line(self):
-        time, cost_list, total_debt = self.get_cost()
+        time, cost_list, total_debt, top_loan = self.get_cost()
         self.cur_lines[0].set_xdata(time)
         self.cur_lines[0].set_ydata(cost_list)
         self.cur_lines[1].set_xdata(time)
         self.cur_lines[1].set_ydata(total_debt)
+        self.set_legend_labels(top_loan)
         self.redraw_canvasses()
 
     def get_cost(self):
         number_of_months = round((self.ending_date.date().toPython() - self.starting_date.date()).days / 365 * 12)
-        if bool(self.use_bsu_as_security.checkState()):
-            if bool(self.use_toploan.checkState()):
-                # return new_calc_attempt(number_of_months, self.get_current_values())
-                raise RuntimeError('Method not yet implemented')
-            else:
-                return calculate_cost_while_saving_with_bsu_as_security(number_of_months, self.get_current_values())
-        else:
-            if bool(self.use_toploan.checkState()):
-                return calculate_cost_with_top_loan(number_of_months, self.get_current_values())
-            else:
-                return calculate_cost_while_saving(number_of_months, self.get_current_values())
+        return calculate_cost(number_of_months, self.get_current_values(), bool(self.use_bsu_as_security.checkState()))
 
 
 def run_app():
