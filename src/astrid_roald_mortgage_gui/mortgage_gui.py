@@ -135,7 +135,8 @@ class MortgagePlotter(QtWidgets.QDialog):
 
 
 def run_app():
-    app = QtWidgets.QApplication([])
+    app = QtWidgets.QApplication.instance() if QtWidgets.QApplication.instance() else QtWidgets.QApplication([])
+
     example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 10000, 100000, 50000, 25000, 25000),
                                          Person(datetime.date(1990, 1, 1), 'p2', 10000, 100000, 50000, 25000, 25000)],
                                         datetime.date(2019, 1, 1), 15000, 3000000, 10, 4)
@@ -143,8 +144,8 @@ def run_app():
     # widget = MortgagePlotter(astrid_roald_input)
     widget.resize(1200, 980)
     widget.show()
-    sys.exit(app.exec_())
+    return app.exec_()
 
 
 if __name__ == '__main__':
-    run_app()
+    sys.exit(run_app())

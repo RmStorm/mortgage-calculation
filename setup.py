@@ -8,8 +8,8 @@ from setuptools import find_packages, setup
 
 # Package meta-data.
 NAME = 'astrid-roald-mortgage-gui'
-DESCRIPTION = 'A small gui for investigating various mortgages'
-URL = 'https://github.com/RmStorm/mortgage_calculation'
+DESCRIPTION = 'A small gui for investigating various mortgages in Norway'
+URL = 'https://github.com/RmStorm/mortgage-calculation'
 EMAIL = 'roaldstorm@gmail.com'
 AUTHOR = 'Roald Storm'
 REQUIRES_PYTHON = '>=3.6.0'
