@@ -2,11 +2,10 @@ import sys
 import datetime
 
 from PySide2 import QtWidgets
-# from PySide2 import QtCore, QtGui
 
-from astrid_roald_mortgage_gui.mortgage_objects import AnalysisVariables
-from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost, AnalysisStartValues
-from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
+from astrid_roald_mortgage_gui.mortgage_objects import AnalysisVariables, AnalysisStartValues, Person
+from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost
+# from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
 from astrid_roald_mortgage_gui.matplotlib_widget import MyMplCanvas
 
 
@@ -41,7 +40,7 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.analysis_start_values = analysis_start_values
         self.starting_date = self.analysis_start_values.simulation_start_date
         self.ending_date = QtWidgets.QDateEdit()
-        self.ending_date.setDate(self.starting_date + datetime.timedelta(days=360*9.5))
+        self.ending_date.setDate(self.starting_date + datetime.timedelta(days=360*12.5))
         self.ending_date.dateChanged.connect(self.change_current_cost_line)
 
         # Create layout
@@ -82,7 +81,8 @@ class MortgagePlotter(QtWidgets.QDialog):
         [static_info_layout.addWidget(QtWidgets.QLabel(info_label)) for info_label in info_labels]
         static_info_layout.addLayout(input_data_layout)
 
-        for i, widget in enumerate([self.ending_date, self.analysis_variable_widgets.use_bsu_as_security_widget, self.button]):
+        for i, widget in enumerate([self.ending_date, self.analysis_variable_widgets.use_bsu_as_security_widget,
+                                    self.button]):
             options_layout.addWidget(widget, i, 0)
 
         # Do first simulation
@@ -129,14 +129,18 @@ class MortgagePlotter(QtWidgets.QDialog):
 
     def get_cost(self):
         number_of_months = round((self.ending_date.date().toPython() - self.starting_date).days / 365 * 12)
-        return calculate_cost(number_of_months, AnalysisVariables(self.analysis_variable_widgets), self.analysis_start_values)
+        return calculate_cost(number_of_months,
+                              AnalysisVariables(self.analysis_variable_widgets),
+                              self.analysis_start_values)
 
 
 def run_app():
     app = QtWidgets.QApplication([])
-    # from astrid_roald_mortgage_gui.mortgage_functions import example_input
-    # widget = MortgagePlotter(example_input)
-    widget = MortgagePlotter(astrid_roald_input)
+    example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 10000, 100000, 50000, 25000, 25000),
+                                         Person(datetime.date(1990, 1, 1), 'p2', 10000, 100000, 50000, 25000, 25000)],
+                                        datetime.date(2019, 1, 1), 15000, 3000000, 10, 4)
+    widget = MortgagePlotter(example_input)
+    # widget = MortgagePlotter(astrid_roald_input)
     widget.resize(1200, 980)
     widget.show()
     sys.exit(app.exec_())

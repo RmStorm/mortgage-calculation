@@ -26,11 +26,6 @@ class AnalysisStartValues:
         self.mortgage_interest_percentage = mortgage_interest_percentage
 
 
-example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 1000, 1000, 500, 1000, 1500),
-                                     Person(datetime.date(1990, 1, 1), 'p2', 1200, 1000, 1000, 0, 0)],
-                                    datetime.date(2019, 3, 20), 1000, 200000, 10, 1)
-
-
 class AnalysisVariables:
     def __init__(self, widgets):
         self.total_housing_money = sum(float(widget.text()) for widget in widgets.housing_money_widgets.values())

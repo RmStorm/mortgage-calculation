@@ -37,7 +37,7 @@ class SavingsSimulation:
 
     def get_month_cost(self, got_mortgage, this_months_money):
         if got_mortgage:
-            interest_cost = self.mortgage * self.mortgage_interest + self.top_loan * self.top_loan_interest
+            interest_cost = (self.mortgage * self.mortgage_interest + self.top_loan * self.top_loan_interest)*.78
             for name, month_money in list(this_months_money.items()):
                 this_months_money[name] = month_money - interest_cost * month_money / self.total_housing_money
             return interest_cost, this_months_money
@@ -128,7 +128,7 @@ def date_range(start_date, months):
         raise ValueError('This date cannot be consistently increased with one month since the day is more than 28')
     for n in range(1, months):
         yield datetime.date(start_date.year + int((start_date.month + n - 1) / 12),
-                                (start_date.month + n - 1) % 12 + 1, start_date.day)
+                            (start_date.month + n - 1) % 12 + 1, start_date.day)
 
 
 def calculate_cost(number_of_months, analysis_variables, analysis_start_values: AnalysisStartValues):
