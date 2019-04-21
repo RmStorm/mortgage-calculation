@@ -5,7 +5,7 @@ from PySide2 import QtWidgets
 
 from astrid_roald_mortgage_gui.mortgage_objects import AnalysisVariables, AnalysisStartValues, Person
 from astrid_roald_mortgage_gui.mortgage_functions import calculate_cost
-# from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
+from astrid_roald_mortgage_gui.secrets.astrid_roald_input import astrid_roald_input
 from astrid_roald_mortgage_gui.matplotlib_widget import MyMplCanvas
 
 
@@ -13,8 +13,12 @@ class AnalysisVariableWidgets:
     def __init__(self, analysis_start_values: AnalysisStartValues, callback, input_data_layout):
         self.housing_money_widgets = {}
 
-        self.use_bsu_as_security_widget = QtWidgets.QCheckBox('Use BSU as security')
-        self.use_bsu_as_security_widget.stateChanged.connect(callback)
+        self.pop_bsu_widget = QtWidgets.QCheckBox('Pop BSU')
+        self.pop_bsu_widget.stateChanged.connect(callback)
+
+        self.pop_bsu2_widget = QtWidgets.QCheckBox('Pop BSU2')
+        self.pop_bsu2_widget.stateChanged.connect(callback)
+
         self.mortgage_date_widget = QtWidgets.QDateEdit()
         self.mortgage_date_widget.setDate(analysis_start_values.simulation_start_date + datetime.timedelta(days=73))
         self.mortgage_date_widget.dateChanged.connect(callback)
@@ -26,11 +30,21 @@ class AnalysisVariableWidgets:
             self.housing_money_widgets[person.name] = widget
             input_data_layout.addRow(f'Housing money {person.name}', widget)
 
-        for field in ['mortgage_goal', 'top_loan_interest_percentage', 'mortgage_interest_percentage']:
+        for field in ['property_value', 'top_loan_interest_percentage', 'mortgage_interest_percentage']:
             widget = QtWidgets.QLineEdit(str(getattr(analysis_start_values, field)))
             setattr(self, f'{field}_widget', widget)
             widget.textChanged.connect(callback)
             input_data_layout.addRow(field.replace('_', ' '), getattr(self, f'{field}_widget'))
+
+    def get_analysis_variables(self):
+        return AnalysisVariables(sum(float(widget.text()) for widget in self.housing_money_widgets.values()),
+                                 bool(self.pop_bsu_widget.checkState()),
+                                 bool(self.pop_bsu2_widget.checkState()),
+                                 self.mortgage_date_widget.date().toPython(),
+                                 float(self.property_value_widget.text()),
+                                 float(self.top_loan_interest_percentage_widget.text()),
+                                 float(self.mortgage_interest_percentage_widget.text()),
+                                 {name: float(widget.text()) for name, widget in self.housing_money_widgets.items()})
 
 
 class MortgagePlotter(QtWidgets.QDialog):
@@ -81,8 +95,8 @@ class MortgagePlotter(QtWidgets.QDialog):
         [static_info_layout.addWidget(QtWidgets.QLabel(info_label)) for info_label in info_labels]
         static_info_layout.addLayout(input_data_layout)
 
-        for i, widget in enumerate([self.ending_date, self.analysis_variable_widgets.use_bsu_as_security_widget,
-                                    self.button]):
+        for i, widget in enumerate([self.ending_date, self.analysis_variable_widgets.pop_bsu_widget,
+                                    self.analysis_variable_widgets.pop_bsu2_widget, self.button]):
             options_layout.addWidget(widget, i, 0)
 
         # Do first simulation
@@ -90,13 +104,16 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.add_cost_line()
 
     def set_legend_labels(self, top_loan):
-        analysis_variables = AnalysisVariables(self.analysis_variable_widgets)
+        analysis_variables = self.analysis_variable_widgets.get_analysis_variables()
+        bsu_legend = ', BSU\'s popped:' if any([analysis_variables.pop_bsu, analysis_variables.pop_bsu2]) else ''
+        bsu_legend += ' BSU' if analysis_variables.pop_bsu else ''
+        bsu_legend += ' BSU2' if analysis_variables.pop_bsu2 else ''
         label = f"d: {analysis_variables.mortgage_date.strftime('%d/%m/%Y')}, " \
             f"h: {analysis_variables.total_housing_money}, " \
-            f"g: {analysis_variables.mortgage_goal}, " \
+            f"g: {analysis_variables.property_value}, " \
             f"t%: {analysis_variables.top_loan_interest_percentage}, " \
-            f"m%: {analysis_variables.mortgage_interest_percentage}, " \
-            f"{'BSU security' if analysis_variables.use_bsu_as_security else 'BSU popped'}, " \
+            f"m%: {analysis_variables.mortgage_interest_percentage}" \
+            f"{bsu_legend}, " \
             f"Toploan: {top_loan}"
         self.cur_lines[0].set_label(label)
         self.cur_lines[1].set_label(label)
@@ -129,19 +146,18 @@ class MortgagePlotter(QtWidgets.QDialog):
 
     def get_cost(self):
         number_of_months = round((self.ending_date.date().toPython() - self.starting_date).days / 365 * 12)
-        return calculate_cost(number_of_months,
-                              AnalysisVariables(self.analysis_variable_widgets),
+        return calculate_cost(number_of_months, self.analysis_variable_widgets.get_analysis_variables(),
                               self.analysis_start_values)
 
 
 def run_app():
     app = QtWidgets.QApplication.instance() if QtWidgets.QApplication.instance() else QtWidgets.QApplication([])
 
-    example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 10000, 100000, 50000, 25000, 25000),
-                                         Person(datetime.date(1990, 1, 1), 'p2', 10000, 100000, 50000, 25000, 25000)],
-                                        datetime.date(2019, 1, 1), 15000, 3000000, 10, 4)
-    widget = MortgagePlotter(example_input)
-    # widget = MortgagePlotter(astrid_roald_input)
+    # example_input = AnalysisStartValues([Person(datetime.date(1990, 1, 1), 'p1', 10000, 100000, 50000, 25000, 25000),
+    #                                      Person(datetime.date(1990, 1, 1), 'p2', 10000, 100000, 50000, 25000, 25000)],
+    #                                     datetime.date(2019, 1, 1), 15000, 3000000, 10, 4)
+    # widget = MortgagePlotter(example_input)
+    widget = MortgagePlotter(astrid_roald_input)
     widget.resize(1200, 980)
     widget.show()
     return app.exec_()

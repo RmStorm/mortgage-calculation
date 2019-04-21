@@ -1,7 +1,7 @@
 import copy
 import datetime
 
-from astrid_roald_mortgage_gui.mortgage_objects import AnalysisStartValues
+from astrid_roald_mortgage_gui.mortgage_objects import AnalysisStartValues, AnalysisVariables
 
 
 def get_monthly_interest_from_yearly(yearly_interest_percentage: float) -> float:
@@ -9,8 +9,8 @@ def get_monthly_interest_from_yearly(yearly_interest_percentage: float) -> float
 
 
 class SavingsSimulation:
-    def __init__(self, analysis_variables, analysis_start_values: AnalysisStartValues):
-        self.mortgage_goal = analysis_variables.mortgage_goal
+    def __init__(self, analysis_variables: AnalysisVariables, analysis_start_values: AnalysisStartValues):
+        self.property_value = analysis_variables.property_value
         self.mortgage = 0
         self.top_loan = 0
 
@@ -27,13 +27,13 @@ class SavingsSimulation:
         self.top_loan_interest = get_monthly_interest_from_yearly(analysis_variables.top_loan_interest_percentage)
 
     def get_total_bsu_value(self):
-        return sum(person.bsu + person.bsu2 for person in self.persons.values())
+        return sum(person.bsu for person in self.persons.values()), sum(person.bsu2 for person in self.persons.values())
 
     def get_bsu_interest_for_one_month(self, interest_so_far):
-        return interest_so_far + ((self.get_total_bsu_value() + interest_so_far) * self.bsu_interest)
+        return interest_so_far + ((sum(self.get_total_bsu_value()) + interest_so_far) * self.bsu_interest)
 
     def get_bsu_interest_for_several_months(self, months):
-        return self.get_total_bsu_value() * ((1 + self.bsu_interest) ** months - 1)
+        return sum(self.get_total_bsu_value()) * ((1 + self.bsu_interest) ** months - 1)
 
     def get_month_cost(self, got_mortgage, this_months_money):
         if got_mortgage:
@@ -48,10 +48,10 @@ class SavingsSimulation:
 
     def top_up_bsus(self, this_months_money):
         for name, month_money in list(this_months_money.items()):
-            if self.persons[name].bsu_left_to_fill > 0:
+            if self.persons[name].bsu_left_to_fill > 0 and self.persons[name].bsu_active:
                 this_months_money[name], self.persons[name].bsu, self.persons[name].bsu_left_to_fill = \
                     self.do_bsu_fill(month_money, self.persons[name].bsu, self.persons[name].bsu_left_to_fill)
-            if self.persons[name].bsu2_left_to_fill > 0:
+            if self.persons[name].bsu2_left_to_fill > 0 and self.persons[name].bsu2_active:
                 this_months_money[name], self.persons[name].bsu2, self.persons[name].bsu2_left_to_fill = \
                     self.do_bsu_fill(month_money, self.persons[name].bsu2, self.persons[name].bsu2_left_to_fill)
         return this_months_money
@@ -68,25 +68,26 @@ class SavingsSimulation:
             bsu_left_to_fill = 0
         return month_leftover_money, bsu, bsu_left_to_fill
 
-    def empty_savings(self):
-        total_savings = self.get_total_bsu_value() + self.regular_savings
-        for name in list(self.persons.keys()):
-            self.persons[name].bsu2 = 0
-            self.persons[name].bsu = 0
+    def empty_savings(self, pop_bsu, pop_bsu2):
+        spendable_savings = self.regular_savings
         self.regular_savings = 0
-        return total_savings
+        for name in list(self.persons.keys()):
+            if pop_bsu:
+                spendable_savings += self.persons[name].bsu
+                self.persons[name].bsu = 0
+                self.persons[name].bsu_active = False
+            if pop_bsu2:
+                spendable_savings += self.persons[name].bsu2
+                self.persons[name].bsu2 = 0
+                self.persons[name].bsu2_active = False
+        return spendable_savings
 
-    def start_mortgage(self, use_bsu_as_security):
-        if use_bsu_as_security:
-            security = self.mortgage_goal + self.get_total_bsu_value()
-            self.mortgage = min(security * .85, self.mortgage_goal - self.regular_savings)
-            self.top_loan = max(self.mortgage_goal - self.regular_savings - security * .85, 0)
-            self.regular_savings = 0
-        else:
-            security = self.mortgage_goal
-            savings = self.empty_savings()
-            self.mortgage = min(security * .85, self.mortgage_goal - savings)
-            self.top_loan = max(self.mortgage_goal - savings - security * .85, 0)
+    def start_mortgage(self, pop_bsu, pop_bsu2):
+        maximum_mortgage = self.property_value * .85 + (0 if pop_bsu else self.get_total_bsu_value()[0])
+        spendable_savings = self.empty_savings(pop_bsu, pop_bsu2)
+        self.mortgage = min(maximum_mortgage, self.property_value - spendable_savings)
+        self.top_loan = max(self.property_value - spendable_savings - maximum_mortgage, 0)
+
 
     def pay_down_debt(self, this_months_money):
         combined_money = sum(this_months_money.values())
@@ -103,23 +104,24 @@ class SavingsSimulation:
             self.regular_savings += combined_money
 
     def new_bsu_year(self):
-        bsu_tax_rebate = {name: (person.maximum_bsu_left_to_fill - person.bsu_left_to_fill) * .2
+        bsu_tax_rebate = {name: (person.maximum_bsu_left_to_fill_this_year - person.bsu_left_to_fill) * .2
                           for name, person in self.persons.items() if person.bsu > 0}
         for name in list(self.persons.keys()):
-            self.persons[name].bsu = self.persons[name].bsu * ((1 + self.bsu_interest) ** 12)
-            self.persons[name].bsu2 = self.persons[name].bsu2 * ((1 + self.bsu_interest) ** 12)
-            self.persons[name].bsu_left_to_fill = min(25000, max(300000 - self.persons[name].bsu, 0))
-            self.persons[name].bsu2_left_to_fill = min(25000, max(300000 - self.persons[name].bsu2, 0))
-            self.persons[name].maximum_bsu_left_to_fill = self.persons[name].bsu_left_to_fill
+            if self.persons[name].bsu_active:
+                self.persons[name].bsu = self.persons[name].bsu * ((1 + self.bsu_interest) ** 12)
+                self.persons[name].bsu_left_to_fill = min(25000, max(300000 - self.persons[name].bsu, 0))
+                self.persons[name].maximum_bsu_left_to_fill_this_year = self.persons[name].bsu_left_to_fill
+            if self.persons[name].bsu2_active:
+                self.persons[name].bsu2 = self.persons[name].bsu2 * ((1 + self.bsu_interest) ** 12)
+                self.persons[name].bsu2_left_to_fill = min(25000, max(300000 - self.persons[name].bsu2, 0))
         return bsu_tax_rebate
 
-    def empty_bsu(self, name):
+    def kill_bsus(self, name):
         extra_money = self.persons[name].bsu + self.persons[name].bsu2
         self.persons[name].bsu = 0
         self.persons[name].bsu2 = 0
-        self.persons[name].bsu_left_to_fill = 0
-        self.persons[name].bsu2_left_to_fill = 0
-        self.persons[name].maximum_bsu_left_to_fill = 0
+        self.persons[name].bsu_active = False
+        self.persons[name].bsu2_active = False
         return extra_money
 
 
@@ -131,7 +133,7 @@ def date_range(start_date, months):
                             (start_date.month + n - 1) % 12 + 1, start_date.day)
 
 
-def calculate_cost(number_of_months, analysis_variables, analysis_start_values: AnalysisStartValues):
+def calculate_cost(number_of_months, analysis_variables: AnalysisVariables, analysis_start_values: AnalysisStartValues):
     saving_simulation = SavingsSimulation(analysis_variables, analysis_start_values)
     cumulative_cost, total_debt, time = [0], [0], [analysis_start_values.simulation_start_date]
     bsu_interest_this_year = saving_simulation.get_bsu_interest_for_several_months(time[0].month)
@@ -154,7 +156,7 @@ def calculate_cost(number_of_months, analysis_variables, analysis_start_values: 
 
         for name, person in saving_simulation.persons.items():
             if pay_date - person.birth_date > datetime.timedelta(days=34*365):
-                extra_money = saving_simulation.empty_bsu(name)
+                extra_money = saving_simulation.kill_bsus(name)
                 this_months_money[name] += extra_money
 
         # If saving, save up the money in the regular savings, otherwise pay down mortgage
@@ -164,10 +166,10 @@ def calculate_cost(number_of_months, analysis_variables, analysis_start_values: 
             total_debt.append(0)
         else:
             if not started_mortgage:
-                saving_simulation.start_mortgage(analysis_variables.use_bsu_as_security)
+                saving_simulation.start_mortgage(analysis_variables.pop_bsu, analysis_variables.pop_bsu2)
                 started_mortgage = True
                 top_loan = saving_simulation.top_loan
-            if analysis_variables.use_bsu_as_security:
+            if not all([analysis_variables.pop_bsu, analysis_variables.pop_bsu2]):
                 this_months_money = saving_simulation.top_up_bsus(this_months_money)
             saving_simulation.pay_down_debt(this_months_money)
             total_debt.append(saving_simulation.mortgage + saving_simulation.top_loan)
