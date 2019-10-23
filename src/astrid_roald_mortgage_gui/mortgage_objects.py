@@ -22,7 +22,7 @@ class AnalysisStartValues:
         self.simulation_start_date = simulation_start_date
         self.rent = rent
         self.deposit = 3*rent
-        self.bsu_interest_percentage = 3.6
+        self.bsu_interest_percentage = 3.75
         self.property_value = property_value
         self.top_loan_interest_percentage = top_loan_interest_percentage
         self.mortgage_interest_percentage = mortgage_interest_percentage

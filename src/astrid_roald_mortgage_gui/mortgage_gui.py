@@ -20,7 +20,7 @@ class AnalysisVariableWidgets:
         self.pop_bsu2_widget.stateChanged.connect(callback)
 
         self.mortgage_date_widget = QtWidgets.QDateEdit()
-        self.mortgage_date_widget.setDate(analysis_start_values.simulation_start_date + datetime.timedelta(days=73))
+        self.mortgage_date_widget.setDate(datetime.date.today() + datetime.timedelta(days=20))
         self.mortgage_date_widget.dateChanged.connect(callback)
         input_data_layout.addRow('mortgage date', self.mortgage_date_widget)
 
@@ -81,10 +81,10 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.button = QtWidgets.QPushButton("Save current cost calculation")
         self.button.clicked.connect(self.add_cost_line)
 
-        self.cost_canvas = MyMplCanvas(width=5, height=4, dpi=100)
-        self.debt_canvas = MyMplCanvas(width=5, height=4, dpi=100)
-        graphs_layout.addWidget(self.cost_canvas)
-        graphs_layout.addWidget(self.debt_canvas)
+        self.cost_canvas, self.debt_canvas, self.wealth_canvas = MyMplCanvas(), MyMplCanvas(), MyMplCanvas()
+        self.canvases = [self.cost_canvas, self.debt_canvas, self.wealth_canvas]
+        for canvas in self.canvases:
+            graphs_layout.addWidget(canvas)
 
         # Add static info
         bsu_total = sum(person.bsu + person.bsu2 for person in analysis_start_values.persons)
@@ -100,7 +100,7 @@ class MortgagePlotter(QtWidgets.QDialog):
             options_layout.addWidget(widget, i, 0)
 
         # Do first simulation
-        self.cur_lines = [None, None]
+        self.cur_lines = [None, None, None]
         self.add_cost_line()
 
     def set_legend_labels(self, top_loan):
@@ -121,26 +121,25 @@ class MortgagePlotter(QtWidgets.QDialog):
         self.debt_canvas.axes.legend()
 
     def redraw_canvasses(self):
-        for canvas in [self.cost_canvas, self.debt_canvas]:
+        for canvas in self.canvases:
             canvas.axes.relim()
             canvas.axes.autoscale_view()
             canvas.draw()
 
     def add_cost_line(self):
-        time, cost_list, total_debt, top_loan = self.get_cost()
-        self.cost_canvas.axes.plot(time, cost_list)
-        self.cur_lines[0] = self.cost_canvas.axes.lines[-1]
-        self.debt_canvas.axes.plot(time, total_debt)
-        self.cur_lines[1] = self.debt_canvas.axes.lines[-1]
+        top_loan, time, cost_list, total_debt, total_wealth = self.get_cost()
+        for i, (canvas, metric) in enumerate(zip(self.canvases, [cost_list, total_debt, total_wealth])):
+            canvas.axes.plot(time, metric)
+            self.cur_lines[i] = canvas.axes.lines[-1]
         self.set_legend_labels(top_loan)
         self.redraw_canvasses()
 
     def change_current_cost_line(self):
-        time, cost_list, total_debt, top_loan = self.get_cost()
-        self.cur_lines[0].set_xdata(time)
-        self.cur_lines[0].set_ydata(cost_list)
-        self.cur_lines[1].set_xdata(time)
-        self.cur_lines[1].set_ydata(total_debt)
+        top_loan, time, cost_list, total_debt, total_wealth = self.get_cost()
+        for i, metric in enumerate([cost_list, total_debt, total_wealth]):
+            self.cur_lines[i].set_xdata(time)
+            self.cur_lines[i].set_ydata(metric)
+        print(cost_list[-1], '\n')
         self.set_legend_labels(top_loan)
         self.redraw_canvasses()
 
@@ -158,7 +157,7 @@ def run_app():
     #                                     datetime.date(2019, 1, 1), 15000, 3000000, 10, 4)
     # widget = MortgagePlotter(example_input)
     widget = MortgagePlotter(astrid_roald_input)
-    widget.resize(1200, 980)
+    widget.resize(1500, 980)
     widget.show()
     return app.exec_()
 

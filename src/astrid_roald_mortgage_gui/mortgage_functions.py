@@ -124,6 +124,12 @@ class SavingsSimulation:
         self.persons[name].bsu2_active = False
         return extra_money
 
+    def get_total_wealth(self, started_mortgage):
+        savings = self.regular_savings + sum(self.get_total_bsu_value())
+        if not started_mortgage:
+            return savings
+        return savings + self.property_value - self.mortgage - self.top_loan
+
 
 def date_range(start_date, months):
     if start_date.day > 28:
@@ -138,6 +144,7 @@ def calculate_cost(number_of_months, analysis_variables: AnalysisVariables, anal
     cumulative_cost, total_debt, time = [0], [0], [analysis_start_values.simulation_start_date]
     bsu_interest_this_year = saving_simulation.get_bsu_interest_for_several_months(time[0].month)
     started_mortgage = False
+    total_wealth = [saving_simulation.get_total_wealth(started_mortgage)]
 
     for pay_date in date_range(analysis_start_values.simulation_start_date, number_of_months):
         time.append(pay_date)
@@ -173,7 +180,8 @@ def calculate_cost(number_of_months, analysis_variables: AnalysisVariables, anal
                 this_months_money = saving_simulation.top_up_bsus(this_months_money)
             saving_simulation.pay_down_debt(this_months_money)
             total_debt.append(saving_simulation.mortgage + saving_simulation.top_loan)
-    return time, cumulative_cost, total_debt, top_loan
+        total_wealth.append(saving_simulation.get_total_wealth(started_mortgage))
+    return top_loan, time, cumulative_cost, total_debt, total_wealth
 
 
 def main():
